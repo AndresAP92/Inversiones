@@ -1,32 +1,63 @@
-// Sample default data to illustrate functionality.
-// Each record contains:
+// Transaction records are stored in memory and persisted to localStorage to
+// maintain a history of operations. Each record contains:
 // fecha (string, YYYY-MM-DD), indice (string), usd (number), shares (number),
 // precio_compra (number), precio_actual (number), valor_actual (number),
 // rentabilidad_pct (number), rentabilidad_clp (number)
-let transactions = [
-    {
-        fecha: '2025-01-15',
-        indice: 'AAPL',
-        usd: 10000,
-        shares: 50,
-        precio_compra: 200,
-        precio_actual: 250,
-        valor_actual: 50 * 250,
-        rentabilidad_pct: ((250 - 200) / 200) * 100,
-        rentabilidad_clp: 10000 * (((250 - 200) / 200)) * 950
-    },
-    {
-        fecha: '2025-02-01',
-        indice: 'MSFT',
-        usd: 8000,
-        shares: 40,
-        precio_compra: 150,
-        precio_actual: 140,
-        valor_actual: 40 * 140,
-        rentabilidad_pct: ((140 - 150) / 150) * 100,
-        rentabilidad_clp: 8000 * (((140 - 150) / 150)) * 950
+let transactions = [];
+
+/**
+ * Load transactions from localStorage. If no data is found, initialize
+ * with a couple of sample transactions. Errors in parsing will reset
+ * the storage and start fresh.
+ */
+function loadTransactions() {
+    const stored = window.localStorage.getItem('transactions');
+    if (stored) {
+        try {
+            const arr = JSON.parse(stored);
+            if (Array.isArray(arr)) {
+                transactions = arr;
+                return;
+            }
+        } catch (ex) {
+            console.warn('Error parsing stored transactions. Starting fresh.', ex);
+        }
     }
-];
+    // Fallback sample data to illustrate functionality
+    transactions = [
+        {
+            fecha: '2025-01-15',
+            indice: 'AAPL',
+            usd: 10000,
+            shares: 50,
+            precio_compra: 200,
+            precio_actual: 250,
+            valor_actual: 50 * 250,
+            rentabilidad_pct: ((250 - 200) / 200) * 100,
+            rentabilidad_clp: 10000 * (((250 - 200) / 200)) * 950
+        },
+        {
+            fecha: '2025-02-01',
+            indice: 'MSFT',
+            usd: 8000,
+            shares: 40,
+            precio_compra: 150,
+            precio_actual: 140,
+            valor_actual: 40 * 140,
+            rentabilidad_pct: ((140 - 150) / 150) * 100,
+            rentabilidad_clp: 8000 * (((140 - 150) / 150)) * 950
+        }
+    ];
+    saveTransactions();
+}
+
+/**
+ * Persist current transactions array to localStorage. Should be called
+ * whenever a transaction is added, edited or deleted.
+ */
+function saveTransactions() {
+    window.localStorage.setItem('transactions', JSON.stringify(transactions));
+}
 
 let dataTable;
 
@@ -210,6 +241,7 @@ async function updateRealTimePrices() {
     });
     renderTable();
     generateAlerts();
+    saveTransactions();
 }
 
 /**
@@ -274,7 +306,7 @@ function renderTable() {
     }
     // Populate tbody
     const tbody = document.querySelector('#transactions-table tbody');
-    transactions.forEach(rec => {
+    transactions.forEach((rec, idx) => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${rec.fecha}</td>
@@ -286,6 +318,10 @@ function renderTable() {
             <td>${formatNumber(rec.valor_actual)}</td>
             <td>${formatNumber(rec.rentabilidad_pct)}%</td>
             <td>${formatNumber(rec.rentabilidad_clp, 0)}</td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-secondary me-1 edit-transaction" data-index="${idx}">Editar</button>
+                <button type="button" class="btn btn-sm btn-outline-danger delete-transaction" data-index="${idx}">Eliminar</button>
+            </td>
         `;
         tbody.appendChild(tr);
     });
@@ -296,6 +332,26 @@ function renderTable() {
     });
     // Compute summary after table update
     computeSummary();
+
+    // Generate alerts based on updated data
+    generateAlerts();
+
+    // Attach delegated event listeners for edit and delete buttons on rows
+    // First remove any existing event handlers to avoid multiple bindings when re-rendering
+    $('#transactions-table tbody').off('click', '.edit-transaction');
+    $('#transactions-table tbody').off('click', '.delete-transaction');
+    $('#transactions-table tbody').on('click', '.edit-transaction', function (e) {
+        const idx = parseInt($(this).data('index'));
+        openEditModal(idx);
+    });
+    $('#transactions-table tbody').on('click', '.delete-transaction', function (e) {
+        const idx = parseInt($(this).data('index'));
+        if (confirm('¿Está seguro de que desea eliminar esta transacción?')) {
+            transactions.splice(idx, 1);
+            saveTransactions();
+            renderTable();
+        }
+    });
 }
 
 function parseFile(file) {
@@ -352,22 +408,143 @@ function parseFile(file) {
             return;
         }
         transactions = extracted;
+        saveTransactions();
         renderTable();
     };
     reader.readAsArrayBuffer(file);
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+/**
+ * Reset the modal form fields to default state. Clears the edit index and
+ * resets all input values.
+ */
+function resetModal() {
+    document.getElementById('transaction-form').reset();
+    document.getElementById('transaction-edit-index').value = '';
+    // Default type is compra
+    document.getElementById('transaction-type').value = 'compra';
+}
+
+/**
+ * Open modal to add a new transaction. Resets form and sets modal title.
+ */
+function openAddModal() {
+    resetModal();
+    document.getElementById('transactionModalLabel').textContent = 'Agregar transacción';
+    const modal = new bootstrap.Modal(document.getElementById('transactionModal'));
+    modal.show();
+}
+
+/**
+ * Open modal to edit an existing transaction at given index. Prefills form
+ * with record data and sets edit index. The modal title will indicate
+ * editing state.
+ * @param {number} idx Index of transaction in the array
+ */
+function openEditModal(idx) {
+    const rec = transactions[idx];
+    if (!rec) return;
+    resetModal();
+    document.getElementById('transactionModalLabel').textContent = 'Editar transacción';
+    document.getElementById('transaction-date').value = rec.fecha;
+    document.getElementById('transaction-index').value = rec.indice;
+    document.getElementById('transaction-usd').value = rec.usd;
+    document.getElementById('transaction-shares').value = rec.shares;
+    document.getElementById('transaction-precio-compra').value = rec.precio_compra;
+    document.getElementById('transaction-precio-actual').value = rec.precio_actual;
+    document.getElementById('transaction-edit-index').value = idx;
+    // Determine type based on sign of shares; negative indicates venta
+    const typeSelect = document.getElementById('transaction-type');
+    typeSelect.value = rec.shares < 0 ? 'venta' : 'compra';
+    const modal = new bootstrap.Modal(document.getElementById('transactionModal'));
+    modal.show();
+}
+
+/**
+ * Save transaction from modal form. Handles both adding new records and
+ * updating existing ones based on the hidden edit index. Computes derived
+ * values and saves to localStorage.
+ */
+function saveTransactionFromModal() {
+    const fecha = document.getElementById('transaction-date').value;
+    const indice = document.getElementById('transaction-index').value.trim();
+    const usdVal = parseFloat(document.getElementById('transaction-usd').value) || 0;
+    const sharesVal = parseFloat(document.getElementById('transaction-shares').value) || 0;
+    const precioCompraVal = parseFloat(document.getElementById('transaction-precio-compra').value) || 0;
+    let precioActualVal = parseFloat(document.getElementById('transaction-precio-actual').value);
+    const tipo = document.getElementById('transaction-type').value;
+    if (!fecha || !indice || !precioCompraVal || !sharesVal || !usdVal) {
+        alert('Todos los campos obligatorios deben completarse.');
+        return;
+    }
+    // Determine sign for ventas: negative shares and USD
+    let usd = usdVal;
+    let shares = sharesVal;
+    if (tipo === 'venta') {
+        usd = -Math.abs(usdVal);
+        shares = -Math.abs(sharesVal);
+    }
+    // If no precio actual provided, default to precio compra
+    if (!precioActualVal) {
+        precioActualVal = precioCompraVal;
+    }
+    // Compute derived values
+    const valorActual = precioActualVal * shares;
+    const rentPct = ((precioActualVal - precioCompraVal) / (precioCompraVal || 1)) * 100;
+    const rentClp = usd * (rentPct / 100) * 950;
+    const record = {
+        fecha: fecha,
+        indice: indice,
+        usd: usd,
+        shares: shares,
+        precio_compra: precioCompraVal,
+        precio_actual: precioActualVal,
+        valor_actual: valorActual,
+        rentabilidad_pct: rentPct,
+        rentabilidad_clp: rentClp
+    };
+    const editIndexStr = document.getElementById('transaction-edit-index').value;
+    if (editIndexStr) {
+        const editIdx = parseInt(editIndexStr);
+        transactions[editIdx] = record;
+    } else {
+        transactions.push(record);
+    }
+    saveTransactions();
     renderTable();
+    // Hide modal
+    const modalEl = document.getElementById('transactionModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) {
+        modal.hide();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    // Load from storage and render existing transactions
+    loadTransactions();
+    renderTable();
+    // File upload handler
     document.getElementById('file-input').addEventListener('change', function (evt) {
         const file = evt.target.files[0];
         if (!file) return;
         parseFile(file);
     });
+    // Real-time price update handler
     document.getElementById('update-prices').addEventListener('click', function () {
-        updateRealTimePrices();
+        updateRealTimePrices().then(() => {
+            saveTransactions();
+        });
+    });
+    // Add transaction handler
+    document.getElementById('add-transaction').addEventListener('click', function () {
+        openAddModal();
+    });
+    // Save transaction from modal
+    document.getElementById('save-transaction').addEventListener('click', function () {
+        saveTransactionFromModal();
     });
     // Optionally, run periodic price updates (e.g., every 30 minutes)
-    // setInterval(updateRealTimePrices, 1800000);
+    // setInterval(() => updateRealTimePrices().then(saveTransactions), 1800000);
     generateAlerts();
 });
