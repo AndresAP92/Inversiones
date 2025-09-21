@@ -3,133 +3,235 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Portafolio de Inversiones</title>
-    <!-- Google Font for a modern, executive feel -->
-    <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>Dashboard de Inversiones</title>
+    <!-- Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons for subtle iconography -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <!-- DataTables Bootstrap 5 CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <style>
         :root {
-            --primary-color: #0d6efd;
-            --bg-color: #f5f7fa;
+            /* Colour palette tuned for a clean fintech look */
+            --primary: #0d6efd;
+            --secondary: #6c757d;
+            --success: #198754;
+            --danger: #dc3545;
+            --light-bg: #f8f9fb;
             --card-bg: #ffffff;
-            --text-color: #333333;
+            --text-colour: #313a46;
         }
         body {
-            background-color: var(--bg-color);
-            font-family: 'Nunito Sans', sans-serif;
-            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            background: var(--light-bg);
+            color: var(--text-colour);
         }
         h1, h2 {
-            color: var(--primary-color);
+            font-weight: 600;
+            color: var(--primary);
         }
         .card {
             border: none;
-            border-radius: 0.5rem;
+            border-radius: 0.75rem;
             background-color: var(--card-bg);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
         }
         .card-title {
-            font-weight: 600;
+            margin-bottom: 1rem;
         }
         .summary-table th {
             width: 60%;
-            background-color: rgba(0,0,0,0.03);
+            background-color: rgba(0,0,0,0.025);
         }
         .summary-table td {
             font-weight: 600;
         }
         .btn-primary {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
+            background-color: var(--primary);
+            border-color: var(--primary);
         }
-        .btn-primary:hover {
-            background-color: #0b5ed7;
-            border-color: #0a58ca;
+        .btn-primary:disabled {
+            opacity: 0.6;
         }
-        .list-group-item {
-            border: none;
+        .btn-success {
+            background-color: var(--success);
+            border-color: var(--success);
+        }
+        .btn-danger {
+            background-color: var(--danger);
+            border-color: var(--danger);
+        }
+        .alert {
+            margin-bottom: 1rem;
+            display: none;
+        }
+        /* Colour code rentabilidad */
+        .rent-pos {
+            color: var(--success);
+        }
+        .rent-neg {
+            color: var(--danger);
         }
     </style>
 </head>
 <body>
-<div class="container my-5">
-    <h1 class="text-center mb-5 fw-bold">Mi Portafolio de Inversiones</h1>
-    <div class="row g-4">
-        <div class="col-lg-6">
-            <div class="card shadow-sm h-100">
+<div class="container py-5">
+    <h1 class="text-center mb-5">Dashboard de Inversiones</h1>
+    <!-- Row of summary cards -->
+    <div class="row g-4 mb-4">
+        <!-- Portfolio summary -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100">
                 <div class="card-body">
-                    <h2 class="card-title h5 mb-3">Resumen del Portafolio</h2>
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="bi bi-pie-chart-fill fs-4 me-2 text-primary"></i>
+                        <h2 class="card-title h5 mb-0">Resumen del Portafolio</h2>
+                    </div>
                     <table class="table table-sm table-borderless summary-table mb-3">
                         <tbody>
-                            <tr>
-                                <th>Total Invertido (USD)</th>
-                                <td id="total-invested">-</td>
-                            </tr>
-                            <tr>
-                                <th>Valor Actual (USD)</th>
-                                <td id="total-value">-</td>
-                            </tr>
-                            <tr>
-                                <th>Rentabilidad (%)</th>
-                                <td id="rentabilidad-pct">-</td>
-                            </tr>
-                            <tr>
-                                <th>Rentabilidad (CLP)</th>
-                                <td id="rentabilidad-clp">-</td>
-                            </tr>
+                        <tr>
+                            <th>Total Invertido (USD)</th>
+                            <td id="total-invested">–</td>
+                        </tr>
+                        <tr>
+                            <th>Valor Actual (USD)</th>
+                            <td id="total-value">–</td>
+                        </tr>
+                        <tr>
+                            <th>Rentabilidad (%)</th>
+                            <td id="rentabilidad-pct">–</td>
+                        </tr>
+                        <tr>
+                            <th>Rentabilidad (CLP)</th>
+                            <td id="rentabilidad-clp">–</td>
+                        </tr>
                         </tbody>
                     </table>
-                    <p class="small text-muted fst-italic">Los valores se calculan utilizando los datos cargados en la tabla de transacciones. Puede cargar un archivo Excel/CSV con la hoja "inversiones" para reemplazar los datos predeterminados.</p>
+                    <small class="text-muted">Resumen basado en las transacciones cargadas.</small>
                 </div>
             </div>
         </div>
-        <div class="col-lg-6">
-            <div class="card shadow-sm h-100">
+        <!-- USD purchases summary -->
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100">
                 <div class="card-body">
-                    <h2 class="card-title h5 mb-3">Cargar Archivo</h2>
-                    <div class="mb-3">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="bi bi-currency-dollar fs-4 me-2 text-primary"></i>
+                        <h2 class="card-title h5 mb-0">Resumen Dólares</h2>
+                    </div>
+                    <table class="table table-sm table-borderless summary-table mb-3">
+                        <tbody>
+                        <tr>
+                            <th>Total USD</th>
+                            <td id="total-usd">–</td>
+                        </tr>
+                        <tr>
+                            <th>Total CLP</th>
+                            <td id="total-usd-clp">–</td>
+                        </tr>
+                        <tr>
+                            <th>TC Promedio</th>
+                            <td id="avg-tc">–</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <small class="text-muted">Basado en las compras de dólares registradas.</small>
+                </div>
+            </div>
+        </div>
+        <!-- File upload and import card -->
+        <div class="col-lg-4 col-md-12">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <i class="bi bi-upload fs-4 me-2 text-primary"></i>
+                        <h2 class="card-title h5 mb-0">Importar cartera</h2>
+                    </div>
+                    <div class="mb-2">
                         <input class="form-control" type="file" id="file-input" accept=".xlsx,.xls,.xlsm,.csv">
                     </div>
-                    <p class="small">El archivo debe contener una hoja llamada <strong>inversiones</strong> con las columnas desde W hasta AI. El sistema extraerá automáticamente las transacciones entre las filas 4 y 101.</p>
+                    <div class="d-grid">
+                        <button id="import-file" class="btn btn-primary" disabled>Importar</button>
+                    </div>
+                    <small class="text-muted d-block mt-2">Seleccione un archivo con la hoja “Inversiones” (columnas W–AI, filas 4–101) para actualizar las transacciones y compras USD.</small>
+                    <div id="file-message" class="alert" role="alert"></div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="card shadow-sm my-4">
+    <!-- Charts -->
+    <div class="card mb-4">
         <div class="card-body">
-            <!-- Header with actions for transactions -->
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2 class="h5 mb-0">Transacciones</h2>
-                <div class="d-flex gap-2">
-                    <button id="add-transaction" class="btn btn-success">Agregar transacción</button>
-                    <button id="update-prices" class="btn btn-primary">Actualizar precios en tiempo real</button>
+            <h2 class="h5 mb-4">Visualización del Portafolio</h2>
+            <div class="row">
+                <div class="col-lg-6 mb-4 mb-lg-0">
+                    <canvas id="investment-chart"></canvas>
+                </div>
+                <div class="col-lg-6">
+                    <canvas id="usd-chart"></canvas>
                 </div>
             </div>
+        </div>
+    </div>
+    <!-- USD purchases table -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 mb-0">Compras de Dólares</h2>
+                <button id="add-usd" class="btn btn-success">Agregar compra</button>
+            </div>
             <div class="table-responsive">
-                <table id="transactions-table" class="table table-striped table-hover" style="width:100%">
+                <table id="usd-table" class="table table-striped table-hover" style="width:100%">
                     <thead>
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Índice</th>
-                            <th>USD</th>
-                            <th>Shares</th>
-                            <th>Precio Compra</th>
-                            <th>Precio Actual</th>
-                            <th>Valor Actual</th>
-                            <th>Rentabilidad (%)</th>
-                            <th>Rentabilidad (CLP)</th>
-                            <th>Acciones</th>
-                        </tr>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Cantidad (USD)</th>
+                        <th>Tipo de cambio</th>
+                        <th>Monto (CLP)</th>
+                        <th>Acciones</th>
+                    </tr>
                     </thead>
-                    <tbody>
-                    </tbody>
+                    <tbody></tbody>
                 </table>
             </div>
         </div>
     </div>
-    <div class="card shadow-sm">
+    <!-- Transactions table -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 mb-0">Transacciones</h2>
+                <div class="d-flex gap-2">
+                    <button id="add-transaction" class="btn btn-success">Nueva transacción</button>
+                    <button id="update-prices" class="btn btn-primary">Actualizar precios en tiempo real</button>
+                </div>
+            </div>
+            <div id="price-message" class="alert" role="alert"></div>
+            <div class="table-responsive">
+                <table id="transactions-table" class="table table-striped table-hover" style="width:100%">
+                    <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Índice</th>
+                        <th>USD</th>
+                        <th>Shares</th>
+                        <th>Precio Compra</th>
+                        <th>Precio Actual</th>
+                        <th>Valor Actual</th>
+                        <th>Rentabilidad (%)</th>
+                        <th>Rentabilidad (CLP)</th>
+                        <th>Acciones</th>
+                    </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- Alerts -->
+    <div class="card mb-4">
         <div class="card-body">
             <h2 class="h5 mb-3">Alertas y sugerencias</h2>
             <ul id="alerts-list" class="list-group"></ul>
@@ -137,74 +239,99 @@
     </div>
 </div>
 
-<!-- jQuery -->
-<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-<!-- DataTables JS -->
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<!-- DataTables Bootstrap 5 JS -->
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-<!-- Bootstrap JS bundle (includes Popper) for modal functionality -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<!-- SheetJS for Excel parsing -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<!-- Our script -->
-<script src="script.js"></script>
-
-    <!-- Modal for adding/editing transactions -->
-    <div class="modal fade" id="transactionModal" tabindex="-1" aria-labelledby="transactionModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="transactionModalLabel">Agregar transacción</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="transaction-form">
-                        <div class="mb-3">
-                            <label for="transaction-date" class="form-label">Fecha</label>
-                            <input type="date" class="form-control" id="transaction-date" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="transaction-index" class="form-label">Índice</label>
-                            <input type="text" class="form-control" id="transaction-index" placeholder="Ej: AAPL" required>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label for="transaction-usd" class="form-label">USD transaccionados</label>
-                                <input type="number" class="form-control" id="transaction-usd" step="0.01" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="transaction-shares" class="form-label">Cantidad de shares</label>
-                                <input type="number" class="form-control" id="transaction-shares" step="0.0001" required>
-                            </div>
-                        </div>
-                        <div class="row g-3 mt-3">
-                            <div class="col-md-6">
-                                <label for="transaction-precio-compra" class="form-label">Precio compra/venta</label>
-                                <input type="number" class="form-control" id="transaction-precio-compra" step="0.0001" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="transaction-precio-actual" class="form-label">Precio actual</label>
-                                <input type="number" class="form-control" id="transaction-precio-actual" step="0.0001">
-                            </div>
-                        </div>
-                        <div class="mb-3 mt-3">
-                            <label for="transaction-type" class="form-label">Tipo</label>
-                            <select class="form-select" id="transaction-type">
-                                <option value="compra" selected>Compra</option>
-                                <option value="venta">Venta</option>
-                            </select>
-                        </div>
-                        <!-- Hidden field to store index when editing -->
-                        <input type="hidden" id="transaction-edit-index" value="">
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="save-transaction">Guardar</button>
-                </div>
-            </div>
-        </div>
+<!-- Modals -->
+<!-- Transaction modal -->
+<div class="modal fade" id="transactionModal" tabindex="-1" aria-labelledby="transactionModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="transactionModalLabel">Agregar transacción</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="transaction-form">
+          <input type="hidden" id="transaction-edit-index">
+          <div class="mb-3">
+            <label for="transaction-date" class="form-label">Fecha</label>
+            <input type="date" class="form-control" id="transaction-date" required>
+          </div>
+          <div class="mb-3">
+            <label for="transaction-index" class="form-label">Índice</label>
+            <input type="text" class="form-control" id="transaction-index" placeholder="Ticker (ej. AAPL)" required>
+          </div>
+          <div class="mb-3">
+            <label for="transaction-usd" class="form-label">USD</label>
+            <input type="number" step="0.01" class="form-control" id="transaction-usd" placeholder="Monto en USD" required>
+          </div>
+          <div class="mb-3">
+            <label for="transaction-shares" class="form-label">Shares</label>
+            <input type="number" step="0.0001" class="form-control" id="transaction-shares" placeholder="Número de acciones" required>
+          </div>
+          <div class="mb-3">
+            <label for="transaction-precio-compra" class="form-label">Precio Compra</label>
+            <input type="number" step="0.01" class="form-control" id="transaction-precio-compra" placeholder="Precio de compra" required>
+          </div>
+          <div class="mb-3">
+            <label for="transaction-precio-actual" class="form-label">Precio Actual</label>
+            <input type="number" step="0.01" class="form-control" id="transaction-precio-actual" placeholder="Precio actual (opcional)">
+          </div>
+          <div class="mb-3">
+            <label for="transaction-type" class="form-label">Tipo</label>
+            <select class="form-select" id="transaction-type">
+              <option value="compra" selected>Compra</option>
+              <option value="venta">Venta</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button id="save-transaction" type="button" class="btn btn-primary">Guardar</button>
+      </div>
     </div>
+  </div>
+</div>
+<!-- USD modal -->
+<div class="modal fade" id="usdModal" tabindex="-1" aria-labelledby="usdModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="usdModalLabel">Agregar compra USD</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="usd-form">
+          <input type="hidden" id="usd-edit-index">
+          <div class="mb-3">
+            <label for="usd-date" class="form-label">Fecha</label>
+            <input type="date" class="form-control" id="usd-date" required>
+          </div>
+          <div class="mb-3">
+            <label for="usd-amount" class="form-label">Cantidad (USD)</label>
+            <input type="number" step="0.01" class="form-control" id="usd-amount" required>
+          </div>
+          <div class="mb-3">
+            <label for="usd-tc" class="form-label">Tipo de cambio</label>
+            <input type="number" step="0.01" class="form-control" id="usd-tc" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button id="save-usd" type="button" class="btn btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Dependencies: jQuery (required by DataTables), Bootstrap JS, DataTables, Chart.js, SheetJS (xlsx) -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Main script -->
+<script src="script.js"></script>
 </body>
 </html>
