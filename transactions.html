@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block head %}
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+{% endblock %}
+{% block content %}
+<h1>Transacciones</h1>
+<table id="transactionsTable" class="display">
+  <thead>
+    <tr>
+      <th>Fecha de Transacción</th>
+      <th>Índice</th>
+      <th>USD</th>
+      <th>Shares</th>
+      <th>Precio Compra</th>
+      <th>Precio Actual</th>
+      <th>Valor Actual</th>
+      <th>Rentabilidad (%)</th>
+      <th>Rentabilidad (CLP)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in data %}
+    <tr>
+      <td>{{ row.fecha_transaccion.strftime('%Y-%m-%d') if row.fecha_transaccion else '' }}</td>
+      <td>{{ row.indice }}</td>
+      <td>{{ '{:,.2f}'.format(row.usd) }}</td>
+      <td>{{ '{:,.2f}'.format(row.shares) }}</td>
+      <td>{{ '{:,.2f}'.format(row.precio_compra) }}</td>
+      <td>{{ '{:,.2f}'.format(row.precio_actual) }}</td>
+      <td>{{ '{:,.2f}'.format(row.valor_actual) }}</td>
+      <td>{{ '{:,.2f}'.format(row.rentabilidad_pct) }}%</td>
+      <td>{{ '{:,.0f}'.format(row.rentabilidad_clp) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+{% block scripts %}
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script>
+    $(document).ready(function() {
+      $('#transactionsTable').DataTable();
+    });
+  </script>
+{% endblock %}
