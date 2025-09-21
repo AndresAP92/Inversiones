@@ -20,6 +20,18 @@ let transactions = [];
 // fecha (string YYYY-MM-DD), cantidad (USD), tc (tipo de cambio CLP por USD)
 let usdPurchases = [];
 
+// Watch list: array of tickers to monitor beyond the portfolio.
+// watchersPrices holds the latest fetched price for each watcher.
+// watchersPrevPrices holds the previous price to compute hourly change.
+// watchersTrends holds the percentage change since last update for each watcher.
+let watchers = [];
+let watchersPrices = {};
+let watchersPrevPrices = {};
+let watchersTrends = {};
+
+// DataTable instances for aggregated summary and watchers
+let aggregatedDataTable = null;
+let watchersDataTable = null;
 // Default dataset extracted from the user's "Inversiones" sheet. These
 // records include only the base fields; derived fields are computed
 // when loaded. By bundling this data here we avoid requiring a file
@@ -46,6 +58,25 @@ function saveUsdPurchases() {
     window.localStorage.setItem('usdPurchases', JSON.stringify(usdPurchases));
 }
 
+// Save watchers list to localStorage
+function saveWatchers() {
+    window.localStorage.setItem('watchers', JSON.stringify(watchers));
+}
+
+// Load watchers list from localStorage
+function loadWatchers() {
+    const stored = window.localStorage.getItem('watchers');
+    if (stored) {
+        try {
+            const arr = JSON.parse(stored);
+            if (Array.isArray(arr)) {
+                watchers = arr.map(t => t.toUpperCase());
+            }
+        } catch (err) {
+            console.warn('Error parsing stored watchers, resetting.', err);
+        }
+    }
+}
 // Load transactions from localStorage or default dataset. Computes derived fields
 // for each record when default data is used.
 function loadTransactions() {
@@ -63,16 +94,24 @@ function loadTransactions() {
     }
     // Use default dataset
     transactions = DEFAULT_TRANSACTIONS.map(rec => {
+        // Determine transaction type based on sign of USD or shares
+        const tipo = (rec.usd || rec.shares) < 0 ? 'venta' : 'compra';
+        // For defaults, precio_compra and precio_actual are provided; use them directly
+        const precioEntrada = rec.precio_compra;
         const precioActual = rec.precio_actual || rec.precio_compra;
         const valorActual = precioActual * rec.shares;
-        const rentPct = ((precioActual - rec.precio_compra) / (rec.precio_compra || 1)) * 100;
-        const rentClp = rec.usd * (rentPct / 100) * 950;
+        const rentPct = ((precioActual - precioEntrada) / (Math.abs(precioEntrada) || 1)) * 100;
+        // Profit/loss in USD is difference between current value and amount invested (USD).
+        const rentUsd = valorActual - rec.usd;
+        // Profit/loss in CLP uses a rough exchange rate of 950 CLP per USD.
+        const rentClp = rentUsd * 950;
         return {
             fecha: rec.fecha,
-            indice: rec.indice,
+            indice: rec.indice.toUpperCase(),
+            tipo: tipo,
             usd: rec.usd,
             shares: rec.shares,
-            precio_compra: rec.precio_compra,
+            precio_compra: precioEntrada,
             precio_actual: precioActual,
             valor_actual: valorActual,
             rentabilidad_pct: rentPct,
@@ -199,7 +238,10 @@ async function updateRealTimePrices() {
     priceMessage.style.display = 'block';
     updateBtn.disabled = true;
     try {
-        const tickers = [...new Set(transactions.map(t => t.indice))];
+        // Combine portfolio tickers with watcher tickers
+        const portfolioTickers = transactions.map(t => t.indice);
+        const watchTickers = watchers.slice();
+        const tickers = [...new Set([...portfolioTickers, ...watchTickers])];
         const priceMap = {};
         for (const ticker of tickers) {
             const price = await fetchLatestPrice(ticker);
@@ -217,8 +259,11 @@ async function updateRealTimePrices() {
             const newPrice = priceMap[rec.indice] ?? rec.precio_actual;
             const precioActual = newPrice;
             const valorActual = precioActual * rec.shares;
-            const rentPct = ((precioActual - rec.precio_compra) / (rec.precio_compra || 1)) * 100;
-            const rentClp = rec.usd * (rentPct / 100) * 950;
+            const rentPct = ((precioActual - rec.precio_compra) / (Math.abs(rec.precio_compra) || 1)) * 100;
+            // Profit/loss in USD is difference between current value and amount invested (USD)
+            const rentUsd = valorActual - rec.usd;
+            // Profit/loss in CLP using 950 CLP per USD
+            const rentClp = rentUsd * 950;
             return {
                 ...rec,
                 precio_actual: precioActual,
@@ -227,8 +272,28 @@ async function updateRealTimePrices() {
                 rentabilidad_clp: rentClp
             };
         });
+        // Update watchers prices and compute trends
+        watchersPrevPrices = { ...watchersPrices };
+        watchersPrices = {};
+        watchers.forEach(ticker => {
+            const newPrice = priceMap[ticker];
+            if (newPrice !== undefined) {
+                watchersPrices[ticker] = newPrice;
+                const prev = watchersPrevPrices[ticker];
+                if (prev !== undefined && prev !== 0) {
+                    const change = ((newPrice - prev) / prev) * 100;
+                    watchersTrends[ticker] = change;
+                } else {
+                    watchersTrends[ticker] = 0;
+                }
+            }
+        });
+        // Persist watchers list (prices not stored)
+        saveWatchers();
         saveTransactions();
         renderTable();
+        renderAggregatedTable();
+        renderWatchersTable();
         computeSummary();
         generateAlerts();
         updateInvestmentChart();
@@ -308,6 +373,7 @@ function renderTable() {
         tr.innerHTML = `
             <td>${rec.fecha}</td>
             <td>${rec.indice}</td>
+            <td>${rec.tipo || (rec.shares < 0 ? 'venta' : 'compra')}</td>
             <td>${formatNumber(rec.usd)}</td>
             <td>${formatNumber(rec.shares)}</td>
             <td>${formatNumber(rec.precio_compra)}</td>
@@ -327,6 +393,7 @@ function renderTable() {
         pageLength: 25
     });
     computeSummary();
+    renderAggregatedTable();
     generateAlerts();
     // Bind events
     $('#transactions-table tbody').off('click', '.edit-transaction');
@@ -391,6 +458,117 @@ function renderUsdTable() {
 }
 
 /* =========================================================================
+ *  Aggregated summary and watchers rendering
+ * ========================================================================= */
+
+// Compute aggregated summary of portfolio by ticker. Returns an array of
+// objects with fields: indice, shares, usd, valor, rent_pct, rent_usd.
+function computeAggregated() {
+    const map = {};
+    transactions.forEach(rec => {
+        const ticker = rec.indice.toUpperCase();
+        if (!map[ticker]) {
+            map[ticker] = { indice: ticker, shares: 0, usd: 0, valor: 0 };
+        }
+        map[ticker].shares += rec.shares || 0;
+        map[ticker].usd += rec.usd || 0;
+        map[ticker].valor += rec.valor_actual || 0;
+    });
+    const result = [];
+    Object.values(map).forEach(obj => {
+        const rentUsd = obj.valor - obj.usd;
+        const rentPct = obj.usd !== 0 ? ((obj.valor - obj.usd) / Math.abs(obj.usd)) * 100 : 0;
+        result.push({
+            indice: obj.indice,
+            shares: obj.shares,
+            usd: obj.usd,
+            valor: obj.valor,
+            rent_pct: rentPct,
+            rent_usd: rentUsd
+        });
+    });
+    // Sort by absolute value descending
+    result.sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
+    return result;
+}
+
+// Render aggregated summary table
+function renderAggregatedTable() {
+    const tbody = document.querySelector('#aggregated-table tbody');
+    if (!tbody) return;
+    // Destroy existing DataTable
+    if (aggregatedDataTable) {
+        aggregatedDataTable.destroy();
+        $('#aggregated-table tbody').empty();
+    }
+    const agg = computeAggregated();
+    agg.forEach(rec => {
+        const pctClass = rec.rent_pct > 0 ? 'rent-pos' : (rec.rent_pct < 0 ? 'rent-neg' : '');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${rec.indice}</td>
+            <td>${formatNumber(rec.shares)}</td>
+            <td>${formatNumber(rec.usd)}</td>
+            <td>${formatNumber(rec.valor)}</td>
+            <td class="${pctClass}">${formatNumber(rec.rent_pct)}%</td>
+            <td class="${pctClass}">${formatNumber(rec.rent_usd)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+    aggregatedDataTable = $('#aggregated-table').DataTable({
+        order: [[3, 'desc']],
+        pageLength: 10
+    });
+}
+
+// Render watchers table
+function renderWatchersTable() {
+    const tbody = document.querySelector('#watchers-table tbody');
+    if (!tbody) return;
+    if (watchersDataTable) {
+        watchersDataTable.destroy();
+        $('#watchers-table tbody').empty();
+    }
+    watchers.forEach((ticker, idx) => {
+        const price = watchersPrices[ticker] !== undefined ? formatNumber(watchersPrices[ticker]) : '–';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${ticker}</td>
+            <td>${price}</td>
+            <td><button type="button" class="btn btn-sm btn-outline-danger remove-watcher" data-index="${idx}">Eliminar</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+    watchersDataTable = $('#watchers-table').DataTable({
+        paging: false,
+        searching: false,
+        info: false,
+        ordering: false
+    });
+    // Bind remove actions
+    $('#watchers-table tbody').off('click', '.remove-watcher');
+    $('#watchers-table tbody').on('click', '.remove-watcher', function () {
+        const idx = parseInt($(this).data('index'));
+        if (!isNaN(idx)) {
+            watchers.splice(idx, 1);
+            saveWatchers();
+            renderWatchersTable();
+        }
+    });
+}
+
+// Add a ticker to watchers list
+function addWatcher(ticker) {
+    const sym = ticker.trim().toUpperCase();
+    if (!sym) return;
+    if (!watchers.includes(sym)) {
+        watchers.push(sym);
+        saveWatchers();
+        renderWatchersTable();
+    }
+}
+
+/* =========================================================================
  *  Chart rendering
  * ========================================================================= */
 // Generate palette for chart segments
@@ -411,15 +589,17 @@ function updateInvestmentChart() {
         if (!dist[rec.indice]) dist[rec.indice] = 0;
         dist[rec.indice] += val;
     });
-    const labels = [];
-    const values = [];
+    // Build sorted arrays of labels and values (descending by absolute value)
+    const pairs = [];
     Object.keys(dist).forEach(key => {
         const v = dist[key];
         if (v !== 0) {
-            labels.push(key);
-            values.push(Math.abs(v));
+            pairs.push({ key: key, value: Math.abs(v) });
         }
     });
+    pairs.sort((a, b) => b.value - a.value);
+    const labels = pairs.map(p => p.key);
+    const values = pairs.map(p => p.value);
     const colors = generatePalette(labels.length);
     if (investmentChart) investmentChart.destroy();
     investmentChart = new Chart(ctx, {
@@ -498,8 +678,10 @@ function updateUsdChart() {
  * ========================================================================= */
 function generateAlerts() {
     const list = document.getElementById('alerts-list');
+    if (!list) return;
     list.innerHTML = '';
     let count = 0;
+    // Portfolio-based alerts
     transactions.forEach(rec => {
         let msg = null;
         if (rec.rentabilidad_pct > 20) {
@@ -509,8 +691,25 @@ function generateAlerts() {
         }
         if (msg) {
             const li = document.createElement('li');
-            li.className = 'list-group-item';
+            li.className = rec.rentabilidad_pct > 0 ? 'list-group-item rent-pos' : 'list-group-item rent-neg';
             li.textContent = msg;
+            list.appendChild(li);
+            count++;
+        }
+    });
+    // Watchers-based alerts (trends)
+    Object.keys(watchersTrends).forEach(ticker => {
+        const change = watchersTrends[ticker];
+        if (change > 3) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item rent-pos';
+            li.textContent = `${ticker}: precio subió ${formatNumber(change)}% en la última hora. Oportunidad de compra.`;
+            list.appendChild(li);
+            count++;
+        } else if (change < -3) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item rent-neg';
+            li.textContent = `${ticker}: precio bajó ${formatNumber(change)}% en la última hora. Podría estar infravalorado.`;
             list.appendChild(li);
             count++;
         }
@@ -586,9 +785,9 @@ async function parseFile(file) {
                     const fechaVal = row[22];
                     const indiceVal = row[23];
                     const usdVal = parseFloat(row[25]) || 0;
-                    const sharesVal = parseFloat(row[26]) || 0;
-                    const precioCompraVal = parseFloat(row[27]) || 0;
-                    const precioActualVal = parseFloat(row[30]) || 0;
+                    const rawShares = parseFloat(row[26]) || 0;
+                    const priceAB = parseFloat(row[27]) || 0; // column AB (precio entrada para compras o precio actual para ventas)
+                    const priceAE = parseFloat(row[30]) || 0; // column AE (precio actual para compras o precio de venta para ventas)
                     // Skip if no date or index
                     if (!fechaVal || !indiceVal) continue;
                     // Convert date
@@ -598,16 +797,36 @@ async function parseFile(file) {
                     } else {
                         fechaStr = XLSX.SSF.format('yyyy-mm-dd', fechaVal);
                     }
-                    const precioActual = precioActualVal || precioCompraVal;
+                    // Determine transaction type (positive USD indicates compra, negative indicates venta)
+                    const tipo = usdVal < 0 ? 'venta' : 'compra';
+                    let precioEntrada, precioActual;
+                    if (tipo === 'compra') {
+                        // For purchases, AB is purchase price, AE is current price
+                        precioEntrada = priceAB;
+                        precioActual = priceAE || priceAB;
+                    } else {
+                        // For sales, AE is sale price (entry), AB is current price
+                        precioEntrada = priceAE;
+                        precioActual = priceAB || priceAE;
+                    }
+                    // If no valid entry price, skip the row
+                    if (!precioEntrada) continue;
+                    // Shares: negative for sales to reduce net position
+                    const sharesVal = tipo === 'venta' ? -Math.abs(rawShares) : Math.abs(rawShares);
                     const valorActual = precioActual * sharesVal;
-                    const rentPct = ((precioActual - precioCompraVal) / (precioCompraVal || 1)) * 100;
-                    const rentClp = usdVal * (rentPct / 100) * 950;
+                    // Rentabilidad computed relative to entry price
+                    const rentPct = ((precioActual - precioEntrada) / (Math.abs(precioEntrada) || 1)) * 100;
+                    // Profit/loss in USD is difference between current value and amount invested
+                    const rentUsd = valorActual - usdVal;
+                    // Profit/loss in CLP using 950 CLP per USD
+                    const rentClp = rentUsd * 950;
                     extracted.push({
                         fecha: fechaStr,
-                        indice: indiceVal,
+                        indice: (indiceVal || '').toString().toUpperCase(),
+                        tipo: tipo,
                         usd: usdVal,
                         shares: sharesVal,
-                        precio_compra: precioCompraVal,
+                        precio_compra: precioEntrada,
                         precio_actual: precioActual,
                         valor_actual: valorActual,
                         rentabilidad_pct: rentPct,
@@ -660,11 +879,14 @@ async function parseFile(file) {
                 }
                 saveTransactions();
                 renderTable();
+                renderAggregatedTable();
                 renderUsdTable();
+                renderWatchersTable();
                 computeSummary();
                 computeUsdSummary();
                 updateInvestmentChart();
                 updateUsdChart();
+                generateAlerts();
                 resolve();
             } catch (err) {
                 reject(err);
@@ -751,11 +973,13 @@ function saveTransactionFromModal() {
     }
     if (!precioActualVal) precioActualVal = precioCompraVal;
     const valorActual = precioActualVal * shares;
-    const rentPct = ((precioActualVal - precioCompraVal) / (precioCompraVal || 1)) * 100;
+    const rentPct = ((precioActualVal - precioCompraVal) / (Math.abs(precioCompraVal) || 1)) * 100;
+    const rentUsd = valorActual - usd;
     const rentClp = usd * (rentPct / 100) * 950;
     const record = {
         fecha: fecha,
-        indice: indice,
+        indice: indice.toUpperCase(),
+        tipo: tipo,
         usd: usd,
         shares: shares,
         precio_compra: precioCompraVal,
@@ -773,6 +997,7 @@ function saveTransactionFromModal() {
     }
     saveTransactions();
     renderTable();
+    renderAggregatedTable();
     updateInvestmentChart();
     generateAlerts();
     const modalEl = document.getElementById('transactionModal');
@@ -810,9 +1035,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load data
     loadTransactions();
     loadUsdPurchases();
+    loadWatchers();
     // Render initial UI
     renderTable();
+    renderAggregatedTable();
     renderUsdTable();
+    renderWatchersTable();
     computeSummary();
     computeUsdSummary();
     updateInvestmentChart();
@@ -833,5 +1061,21 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('save-usd').addEventListener('click', () => {
         saveUsdFromModal();
     });
+    // Watcher input and button
+    const watcherInput = document.getElementById('watcher-input');
+    const addWatcherBtn = document.getElementById('add-watcher');
+    if (addWatcherBtn && watcherInput) {
+        addWatcherBtn.addEventListener('click', () => {
+            addWatcher(watcherInput.value);
+            watcherInput.value = '';
+        });
+        watcherInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addWatcher(watcherInput.value);
+                watcherInput.value = '';
+            }
+        });
+    }
     generateAlerts();
 });
