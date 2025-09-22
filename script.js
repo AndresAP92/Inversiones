@@ -532,8 +532,8 @@ function renderTable() {
     const tbody = document.querySelector('#transactions-table tbody');
     transactions.forEach((rec, idx) => {
         const tr = document.createElement('tr');
-        // Determine class for rentability
-        const pctClass = rec.rentabilidad_pct > 0 ? 'rent-pos' : (rec.rentabilidad_pct < 0 ? 'rent-neg' : '');
+        // Determine class for rentability (positive values in blue, negative in red)
+        const pctClass = rec.rentabilidad_pct > 0 ? 'text-positive' : (rec.rentabilidad_pct < 0 ? 'text-negative' : '');
         tr.innerHTML = `
             <td>${rec.fecha}</td>
             <td>${rec.indice}</td>
@@ -667,7 +667,8 @@ function renderAggregatedTable() {
     }
     const agg = computeAggregated();
     agg.forEach(rec => {
-        const pctClass = rec.rent_pct > 0 ? 'rent-pos' : (rec.rent_pct < 0 ? 'rent-neg' : '');
+        // Apply colour coding based on sign of rent_pct
+        const pctClass = rec.rent_pct > 0 ? 'text-positive' : (rec.rent_pct < 0 ? 'text-negative' : '');
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${rec.indice}</td>
@@ -834,31 +835,37 @@ function updateUsdChart() {
  *  Alert generation
  * ========================================================================= */
 function generateAlerts() {
-    const list = document.getElementById('alerts-list');
-    if (!list) return;
-    list.innerHTML = '';
-    let count = 0;
-    // Use a Set to avoid duplicate messages
-    const seen = new Set();
+    // Locate alert lists
+    const nonTechList = document.getElementById('alerts-list');
+    const techList = document.getElementById('tech-alerts-list');
+    if (!nonTechList || !techList) return;
+    // Clear existing entries
+    nonTechList.innerHTML = '';
+    techList.innerHTML = '';
+    let nonTechCount = 0;
+    let techCount = 0;
+    // Use Sets to avoid duplicate messages
+    const seenNonTech = new Set();
+    const seenTech = new Set();
     // Portfolio-based alerts (rentabilidad thresholds)
     transactions.forEach(rec => {
         if (!rec.indice) return;
         let message = '';
         let cls = '';
         if (rec.rentabilidad_pct >= 20) {
-            message = `${rec.indice}: la rentabilidad supera el 20%. Considere tomar ganancias.`;
-            cls = 'rent-pos';
+            message = `${rec.indice}: rentabilidad supera el 20%. Considere tomar ganancias.`;
+            cls = 'text-positive';
         } else if (rec.rentabilidad_pct <= -10) {
-            message = `${rec.indice}: la rentabilidad cae por debajo de -10%. Revise su posición.`;
-            cls = 'rent-neg';
+            message = `${rec.indice}: rentabilidad cae por debajo de -10%. Revise su posición.`;
+            cls = 'text-negative';
         }
-        if (message && !seen.has(message)) {
+        if (message && !seenNonTech.has(message)) {
             const li = document.createElement('li');
             li.className = `list-group-item ${cls}`.trim();
             li.textContent = message;
-            list.appendChild(li);
-            seen.add(message);
-            count++;
+            nonTechList.appendChild(li);
+            seenNonTech.add(message);
+            nonTechCount++;
         }
     });
     // Alerts based on watcher trends (>= +3% or <= -3%)
@@ -867,44 +874,52 @@ function generateAlerts() {
         let message = '';
         let cls = '';
         if (change > 3) {
-            message = `${ticker}: precio subió ${formatNumber(change)}% en la última hora. Oportunidad de compra.`;
-            cls = 'rent-pos';
+            message = `${ticker}: precio subió ${formatNumber(change)}% en la última hora. Posible oportunidad.`;
+            cls = 'text-positive';
         } else if (change < -3) {
-            message = `${ticker}: precio bajó ${formatNumber(change)}% en la última hora. Podría estar infravalorado.`;
-            cls = 'rent-neg';
+            message = `${ticker}: precio bajó ${formatNumber(change)}% en la última hora. Posible corrección.`;
+            cls = 'text-negative';
         }
-        if (message && !seen.has(message)) {
+        if (message && !seenNonTech.has(message)) {
             const li = document.createElement('li');
             li.className = `list-group-item ${cls}`.trim();
             li.textContent = message;
-            list.appendChild(li);
-            seen.add(message);
-            count++;
+            nonTechList.appendChild(li);
+            seenNonTech.add(message);
+            nonTechCount++;
         }
     });
-
     // Technical alerts from periodic analysis (RSI, sentiment, etc.)
     technicalAlerts.forEach(msg => {
-        if (!seen.has(msg)) {
+        if (!seenTech.has(msg)) {
             const li = document.createElement('li');
             // Colour code technical alerts based on keywords
             let cls = '';
-            if (msg.toLowerCase().includes('positiva') || msg.toLowerCase().includes('oportunidad') || msg.toLowerCase().includes('sobreventa')) {
-                cls = 'rent-pos';
-            } else if (msg.toLowerCase().includes('negativa') || msg.toLowerCase().includes('precaución') || msg.toLowerCase().includes('sobrecompra')) {
-                cls = 'rent-neg';
+            const lower = msg.toLowerCase();
+            if (lower.includes('positivo') || lower.includes('oportunidad') || lower.includes('sobreventa')) {
+                cls = 'text-positive';
+            } else if (lower.includes('negativo') || lower.includes('precaución') || lower.includes('sobrecompra')) {
+                cls = 'text-negative';
             }
             li.className = `list-group-item ${cls}`.trim();
             li.textContent = msg;
-            list.appendChild(li);
-            seen.add(msg);
+            techList.appendChild(li);
+            seenTech.add(msg);
+            techCount++;
         }
     });
-    if (count === 0) {
+    // If no alerts, show placeholder in each list
+    if (nonTechCount === 0) {
         const li = document.createElement('li');
-        li.className = 'list-group-item';
-        li.textContent = 'No hay alertas en este momento.';
-        list.appendChild(li);
+        li.className = 'list-group-item text-muted';
+        li.textContent = 'Sin alertas por ahora.';
+        nonTechList.appendChild(li);
+    }
+    if (techCount === 0) {
+        const li = document.createElement('li');
+        li.className = 'list-group-item text-muted';
+        li.textContent = 'Sin alertas técnicas.';
+        techList.appendChild(li);
     }
 }
 

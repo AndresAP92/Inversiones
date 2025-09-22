@@ -19,14 +19,36 @@
             --secondary: #6c757d;
             --success: #198754;
             --danger: #dc3545;
-            --light-bg: #f8f9fb;
+            --positive: #0d6efd; /* blue for gains */
+            --negative: #b00020; /* deep red for losses */
+            --light-bg: #f7f9fb;
             --card-bg: #ffffff;
-            --text-colour: #313a46;
+            --text-colour: #2f3640;
         }
         body {
             font-family: 'Inter', sans-serif;
             background: var(--light-bg);
             color: var(--text-colour);
+            font-size: 0.95rem;
+        }
+        /* Reduce font sizes inside tables to avoid clutter */
+        table.table th, table.table td {
+            font-size: 0.85rem;
+            vertical-align: middle;
+        }
+        /* Style for alerts list containers to prevent page overflow */
+        #alerts-list, #tech-alerts-list {
+            max-height: 240px;
+            overflow-y: auto;
+            padding-right: 0;
+        }
+        /* Colour coding for profitability values */
+        .text-positive { color: var(--positive); }
+        .text-negative { color: var(--negative); }
+        /* Card tweaks */
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         h1, h2 {
             font-weight: 600;
@@ -270,7 +292,14 @@
                     <div class="card mb-4">
                         <div class="card-body">
                             <h2 class="h5 mb-3">Alertas y sugerencias</h2>
-                            <ul id="alerts-list" class="list-group"></ul>
+                            <ul id="alerts-list" class="list-group small"></ul>
+                        </div>
+                    </div>
+                    <!-- Technical Alerts card -->
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h2 class="h5 mb-3">Alertas técnicas</h2>
+                            <ul id="tech-alerts-list" class="list-group small"></ul>
                         </div>
                     </div>
                 </div>
